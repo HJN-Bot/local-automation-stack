@@ -1,0 +1,57 @@
+version: '3.9'
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - TZ=${TZ}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    restart: unless-stopped
+
+  dify-db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=dify
+      - POSTGRES_USER=dify
+      - POSTGRES_PASSWORD=${DIFY_DB_PASSWORD}
+    volumes:
+      - dify_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  dify-redis:
+    image: redis:7
+    command: ["redis-server", "--requirepass", "${DIFY_REDIS_PASSWORD}"]
+    volumes:
+      - dify_redis_data:/data
+    restart: unless-stopped
+
+  dify:
+    image: langgenius/dify-api:latest
+    depends_on:
+      - dify-db
+      - dify-redis
+    ports:
+      - "8081:5001"
+    environment:
+      - SECRET_KEY=${DIFY_SECRET_KEY}
+      - DB_USERNAME=dify
+      - DB_PASSWORD=${DIFY_DB_PASSWORD}
+      - DB_HOST=dify-db
+      - DB_PORT=5432
+      - DB_DATABASE=dify
+      - REDIS_HOST=dify-redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${DIFY_REDIS_PASSWORD}
+      - TZ=${TZ}
+    restart: unless-stopped
+
+volumes:
+  n8n_data:
+  dify_db_data:
+  dify_redis_data:
