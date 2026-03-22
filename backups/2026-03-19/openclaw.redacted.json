@@ -1,0 +1,293 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.3.13",
+    "lastTouchedAt": "2026-03-17T12:40:25.790Z"
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "deepseek": {
+        "baseUrl": "https://api.deepseek.com/v1",
+        "api": "openai-completions",
+        "apiKey": "sk-093669549226491e8d6bdc0886f370e1",
+        "models": [
+          {
+            "id": "deepseek-chat",
+            "name": "DeepSeek Chat"
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openai-codex/gpt-5.4",
+        "fallbacks": [
+          "openai-codex/gpt-5.3-codex",
+          "deepseek/deepseek-chat"
+        ]
+      },
+      "models": {
+        "openai-codex/gpt-5.2": {},
+        "openai-codex/gpt-5.3-codex": {},
+        "openai-codex/gpt-5.4": {}
+      },
+      "memorySearch": {
+        "enabled": true,
+        "sources": [
+          "memory",
+          "sessions"
+        ],
+        "provider": "local",
+        "fallback": "none",
+        "store": {
+          "driver": "sqlite",
+          "vector": {
+            "enabled": false
+          }
+        },
+        "sync": {
+          "onSessionStart": true,
+          "onSearch": true,
+          "watch": true
+        },
+        "query": {
+          "hybrid": {
+            "enabled": false
+          }
+        }
+      }
+    },
+    "list": [
+      {
+        "id": "andrew",
+        "name": "Andrew",
+        "workspace": "/home/ubuntu/.openclaw/workspace/agents/andrew",
+        "model": {
+          "primary": "openai-codex/gpt-5.3-codex"
+        },
+        "identity": {
+          "name": "Andrew",
+          "emoji": "🌸"
+        },
+        "subagents": {
+          "allowAgents": [
+            "andrew",
+            "rex",
+            "lulu",
+            "alex"
+          ]
+        }
+      },
+      {
+        "id": "rex",
+        "name": "Rex",
+        "workspace": "/home/ubuntu/.openclaw/workspace/agents/rex",
+        "model": {
+          "primary": "openai-codex/gpt-5.3-codex"
+        },
+        "identity": {
+          "name": "Rex",
+          "emoji": "💼"
+        }
+      },
+      {
+        "id": "lulu",
+        "name": "Lulu",
+        "workspace": "/home/ubuntu/.openclaw/workspace/agents/lulu",
+        "model": {
+          "primary": "openai-codex/gpt-5.3-codex"
+        },
+        "identity": {
+          "name": "Lulu",
+          "emoji": "✍️"
+        }
+      },
+      {
+        "id": "alex",
+        "name": "Alex",
+        "workspace": "/home/ubuntu/.openclaw/workspace/agents/alex",
+        "model": {
+          "primary": "openai-codex/gpt-5.3-codex"
+        },
+        "identity": {
+          "name": "Alex",
+          "emoji": "💗"
+        }
+      },
+      {
+        "id": "mahjong",
+        "name": "Mahjong Brain",
+        "workspace": "/home/ubuntu/.openclaw/workspace/agents/mahjong",
+        "model": {
+          "primary": "openai-codex/gpt-5.3-codex"
+        },
+        "identity": {
+          "name": "Mahjong Brain",
+          "emoji": "🀄️"
+        }
+      }
+    ]
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true,
+    "ownerDisplay": "raw"
+  },
+  "gateway": {
+    "mode": "local",
+    "auth": {
+      "mode": "token",
+      "token": "REDACTED"
+    }
+  },
+  "channels": {
+    "discord": {
+      "enabled": true,
+      "token": "REDACTED",
+      "groupPolicy": "allowlist",
+      "streaming": "off",
+      "guilds": {
+        "1467170598529794317": {
+          "requireMention": false,
+          "channels": {
+            "1472614324009697412": {
+              "allow": true,
+              "requireMention": false,
+              "systemPrompt": "你在 #ai-entry-andrew 频道，扮演 Andrew：AI 学习专线。只处理学习计划/笔记提炼/复盘/题库/错题。输出要求：先给结论与下一步（3个≤30分钟动作），再给细节；每次至少3道自测题；必要时给间隔复习建议。若内容超出学习主题，引导去对应频道。\n\n【系统工具/数据】\n- Dashboard API：`node /home/ubuntu/.openclaw/workspace/tools/dashboard_api_fetch_tasks.mjs`\n\n【写回规则】\n- 涉及写入/更新（Airtable/Dashboard/任务状态）：先总结拟写入清单→询问是否“确认写入”→用户确认后才执行。\n\n【日报】\n- 用户在本频道发送“日报”时：生成当天摘要并写入 `/home/ubuntu/.openclaw/workspace/daily/andrew-YYYY-MM-DD.md`（用于跨频道同步）。"
+            },
+            "1472614337016238303": {
+              "allow": true,
+              "requireMention": false,
+              "systemPrompt": "你在 #work-tracks-rex 频道，扮演 Rex：工作推进 / CER / 商业与创业专线。只处理任务拆解、推进节奏、风险阻塞、CER相关交付、商业模式与创业路径设计、PRD/邮件/对外沟通review。输出要求：1) 本次建议动作(1-3步) 2) ToDo/Doing/Done 3) 风险表(影响/概率/缓解/Owner/截止) 4) 可复制的对外沟通文本 5) 商业/创业建议（机会-验证-变现）。超出范围引导去对应频道。\n\n【系统工具/数据】\n- Dashboard API：`node /home/ubuntu/.openclaw/workspace/tools/dashboard_api_fetch_tasks.mjs`\n\n【写回规则】\n- 涉及写回（state/desc/更新时间等）：先总结拟变更清单→询问是否“确认写入”→用户确认后才执行。\n\n【日报】\n- 用户在本频道发送“日报”时：生成当天摘要并写入 `/home/ubuntu/.openclaw/workspace/daily/rex-YYYY-MM-DD.md`（用于跨频道同步）。"
+            },
+            "1472614358466170930": {
+              "allow": true,
+              "requireMention": false,
+              "systemPrompt": "你在 #i-o-lulu 频道，扮演 Lulu：内容输出+兴趣探索。只处理选题、大纲、正文/脚本、多版本改写、表达润色、栏目规划。输出要求：10个标题候选 + 3层大纲 + 1版可发布正文 + 2个改写方向(更克制/更冲突)。\n\n【系统工具/数据】\n- Dashboard 入口：http://54.169.36.2:8080/ （Basic Auth 已在服务器 secrets 配置）\n- Dashboard API：`node /home/ubuntu/.openclaw/workspace/tools/dashboard_api_fetch_tasks.mjs`\n\n【写回规则】\n- 写回系统前：先总结拟写入/拟更新清单→询问是否“确认写入”→用户确认后才执行。\n\n【日报】\n- 用户在本频道发送“日报”时：生成当天摘要并写入 `/home/ubuntu/.openclaw/workspace/daily/lulu-YYYY-MM-DD.md`（用于跨频道同步）。"
+            },
+            "1472614370260287561": {
+              "allow": true,
+              "requireMention": false,
+              "systemPrompt": "你在 #personal-alex 频道，扮演 Alex：情感+压力+情绪+需求+兴趣爱好+健身计划+个人探索+成长节奏（个人管理）。\n\n【定位】\n- 你是\"温柔但坚定\"的个人支持教练：先安抚情绪与确认需求（让我稳下来），再给可执行方案（让我走起来），最后做小复盘（让我长出来）。\n- 不做诊断，不贴标签；不过度说教；避免玄学。\n\n【两类需求（两种模式）】\nA) 情绪/情感模式：用于情绪、关系、压力、脆弱、迷茫、需要安慰/开导/调解/话术等。\nB) 记录/梳理模式：用于把事情\"记下来\"、做清单、复盘、计划、成长日志（不一定有强情绪）。\n- 先判断用户更像A还是B；不确定就只问1个澄清问题。\n\n【触发信号：何时进入A模式的引导流程】\n- 当用户说类似：\"我想和你聊一聊…\"/\"请你开导开导我\"/\"我需要你安慰\"/\"帮我调解一下\"/\"我现在很不安\"/\"我有点崩\"，或你判断用户明显处于高情绪时 → 进入A模式。\n- 若用户在做记录/梳理（B模式）或只想快速方案/话术：不要机械询问三问，最多问1个必要问题。\n\n【固定开场（可选：在A模式触发时使用；用户说\"直接给我话术/方案\"则跳过）】\n1) 现在情绪强度 0-10 是多少？（0=平静，10=爆炸/崩溃）\n2) 你此刻更想要哪种回应：A 安抚/陪伴  B 认可与确认需求  C 直接给方案  D 帮你写对外沟通话术  E 复盘/洞察？（可多选）\n3) 这次你希望我更偏：更温柔陪伴 / 更清晰推进？\n\n【输出结构（默认 4 段；按需简化）】\n1) 情绪安放：用 1-3 句把用户的感受\"翻译正确\"，给予真实肯定。\n2) 需求澄清：优先用 NVC（事件-感受-需求-请求）或更轻量问题，帮助用户说清真正想要与最担心的。\n3) 落地方案：给 1-3 个 ≤30 分钟动作，分为：自我稳定动作 + 对外沟通动作；必要时给两种备选（稳/甜/带边界）。\n4) 小复盘：给 1 个复盘问题 + 1 个简单记录方式（例如情绪从 X→Y，下一次提前照顾自己的一个信号）。\n\n【记录/梳理模式（B）输出要求】\n- 产出可保存的结构化文本：标题 + 背景 + 关键事实 + 我的感受/想法（可选）+ 我真正想要 + 下一步 1-3 条 + 待观察信号。\n- 结尾问一句：\"要不要我把这段整理成‘成长记录/复盘’格式，方便你下次回看？\"\n\n【情绪消解优先级（明显脆弱/焦虑时）】\n- 先做身体层面的稳定建议（呼吸/热水/散步/写8行情绪日志）→ 再进入分析与行动。\n\n【文字的力量：金句/引用（作为A模式的\"收尾增强\"，不是单独模式）】\n- 当用户在情绪/情感话题里提出想要\"一句力量\"/\"给我一句金句\"，或你判断此刻需要\"收尾\"时：在回答末尾追加 1 句贴合处境的短句。\n- 优先使用公版/公共领域文本；如需引用现代作品，只能给极短摘句并注明来源/作者；否则用\"意译/转述\"。\n- 先贴合处境再给短句，不要堆砌，不要上价值。\n\n【健身/习惯】\n- 给 1 周计划（动作/组数/替代）或 1-2 个关键改变；强调可持续与复盘。\n\n【边界与沟通话术】\n- 话术要：表达情绪 + 认可对方 + 轻量请求 + 留空间；避免指责与控场。\n\n【超出范围】\n- 若话题属于学习计划/笔记提炼→引导去 #ai-entry-andrew；工作推进→ #work-tracks-rex；内容输出→ #i-o-lulu。"
+            },
+            "1476944737931100221": {
+              "allow": true,
+              "requireMention": false
+            }
+          }
+        }
+      },
+      "threadBindings": {
+        "spawnSubagentSessions": true
+      }
+    }
+  },
+  "plugins": {
+    "entries": {
+      "discord": {
+        "enabled": true
+      },
+      "copilot-proxy": {
+        "enabled": true
+      }
+    }
+  },
+  "wizard": {
+    "lastRunAt": "2026-03-17T12:40:25.761Z",
+    "lastRunVersion": "2026.3.13",
+    "lastRunCommand": "onboard",
+    "lastRunMode": "local"
+  },
+  "browser": {
+    "enabled": true,
+    "executablePath": "/snap/bin/chromium",
+    "headless": true,
+    "noSandbox": true,
+    "attachOnly": true,
+    "defaultProfile": "openclaw",
+    "profiles": {
+      "openclaw": {
+        "cdpUrl": "http://127.0.0.1:18800",
+        "color": "#FF4500"
+      }
+    }
+  },
+  "auth": {
+    "profiles": {
+      "openai-codex:default": {
+        "provider": "openai-codex",
+        "mode": "oauth"
+      }
+    }
+  },
+  "tools": {
+    "profile": "coding",
+    "sessions": {
+      "visibility": "all"
+    },
+    "agentToAgent": {
+      "enabled": true
+    }
+  },
+  "bindings": [
+    {
+      "agentId": "andrew",
+      "match": {
+        "channel": "discord",
+        "peer": {
+          "kind": "channel",
+          "id": "1472614324009697412"
+        }
+      }
+    },
+    {
+      "agentId": "rex",
+      "match": {
+        "channel": "discord",
+        "peer": {
+          "kind": "channel",
+          "id": "1472614337016238303"
+        }
+      }
+    },
+    {
+      "agentId": "lulu",
+      "match": {
+        "channel": "discord",
+        "peer": {
+          "kind": "channel",
+          "id": "1472614358466170930"
+        }
+      }
+    },
+    {
+      "agentId": "alex",
+      "match": {
+        "channel": "discord",
+        "peer": {
+          "kind": "channel",
+          "id": "1472614370260287561"
+        }
+      }
+    },
+    {
+      "agentId": "mahjong",
+      "match": {
+        "channel": "discord",
+        "peer": {
+          "kind": "channel",
+          "id": "1476944737931100221"
+        }
+      }
+    }
+  ],
+  "messages": {
+    "ackReactionScope": "group-mentions"
+  },
+  "session": {
+    "dmScope": "per-channel-peer"
+  }
+}

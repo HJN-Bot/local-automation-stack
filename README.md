@@ -1,31 +1,15 @@
-# Local Automation Stack (Dify + n8n)
+# OpenClaw Config Kit (private)
 
-本仓库用于本地部署：
-- Dify（LLM 应用编排）
-- n8n（自动化工作流编排）
+Reusable config hardening + restore scripts for Discord multi-agent setups.
 
-## 快速启动
+## What it does
+- backup current `~/.openclaw/openclaw.json`
+- set Discord `groupPolicy=allowlist`
+- restore channel `systemPrompt` blocks from a backup config
+- run health checks (`openclaw status --deep`, `openclaw security audit --deep`)
+
+## Usage
 ```bash
-cp .env.example .env
-# 按需修改密码和密钥
-
-docker compose up -d
+node scripts/backup-and-harden.mjs
+node scripts/restore-prompts-from-backup.mjs ~/.openclaw/openclaw.json.bak.4
 ```
-
-- n8n: http://localhost:5678
-- Dify: http://localhost:8081
-
-## 停止
-```bash
-docker compose down
-```
-
-## 目录
-- `docker-compose.yml`：主编排
-- `.env.example`：环境变量模板
-- `docs/`：部署/安全/联调说明
-
-## 安全建议
-- 修改默认密码
-- 不对公网暴露端口（先本机 loopback）
-- 将密钥放入 `.env`，不要提交到 git

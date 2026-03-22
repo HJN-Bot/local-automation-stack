@@ -1,0 +1,27 @@
+{
+  "generatedAtUtc": "2026-03-19T07:08:00.448557+00:00",
+  "defaultModel": "openai-codex/gpt-5.4",
+  "agentCount": 5,
+  "agents": [
+    {
+      "id": "andrew",
+      "model": "openai-codex/gpt-5.3-codex"
+    },
+    {
+      "id": "rex",
+      "model": "openai-codex/gpt-5.3-codex"
+    },
+    {
+      "id": "lulu",
+      "model": "openai-codex/gpt-5.3-codex"
+    },
+    {
+      "id": "alex",
+      "model": "openai-codex/gpt-5.3-codex"
+    },
+    {
+      "id": "mahjong",
+      "model": "openai-codex/gpt-5.3-codex"
+    }
+  ]
+}
