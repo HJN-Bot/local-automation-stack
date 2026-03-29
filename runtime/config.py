@@ -72,6 +72,11 @@ FEISHU_APP_SECRET_LULU: str     = os.getenv("FEISHU_APP_SECRET_LULU", "")
 FEISHU_APP_ID_ALEX: str         = os.getenv("FEISHU_APP_ID_ALEX", "")
 FEISHU_APP_SECRET_ALEX: str     = os.getenv("FEISHU_APP_SECRET_ALEX", "")
 
+# ── Tools ─────────────────────────────────────────────────────────────────────
+TAVILY_API_KEY: str         = os.getenv("TAVILY_API_KEY", "")
+CODE_RUNNER_TIMEOUT: int    = int(os.getenv("CODE_RUNNER_TIMEOUT", "30"))   # seconds per script
+TOOL_MAX_ITERATIONS: int    = int(os.getenv("TOOL_MAX_ITERATIONS", "5"))    # tool-use loop cap
+
 # ── Harness behaviour ─────────────────────────────────────────────────────────
 LEASE_DURATION_SECONDS: int = int(os.getenv("LEASE_DURATION_SECONDS", "1800"))
 POLL_INTERVAL_SECONDS: int = int(os.getenv("POLL_INTERVAL_SECONDS", "600"))

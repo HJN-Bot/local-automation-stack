@@ -33,6 +33,7 @@ import runtime.lock_manager as lock_manager
 import runtime.notify as notify
 import runtime.state_machine as state_machine
 import runtime.task_context as task_context
+import runtime.tool_runner as tool_runner
 import runtime.validation as validation
 from runtime.config import (
     AIRTABLE_API_KEY,
@@ -40,6 +41,7 @@ from runtime.config import (
     TABLE_TASKSTATELOG,
     CLAIMABLE_STATUSES,
     FIELDS,
+    TOOL_MAX_ITERATIONS,
 )
 from runtime.llm_caller import call as llm_call
 
@@ -128,6 +130,47 @@ def _execute_task(record: dict) -> None:
 
         log.info("task: %s — calling LLM (%d messages)", task_id, len(llm_messages))
         llm_output = llm_call(system_prompt, llm_messages)
+
+        # ── 5b. Tool-use loop ─────────────────────────────────────────────────
+        # If the LLM requested tools (search / run_python / fetch_url / run_bash),
+        # execute them and call the LLM again with the results.
+        # Repeat up to TOOL_MAX_ITERATIONS times, then proceed with final output.
+        tool_iter = 0
+        while llm_output.get("tool_calls") and tool_iter < TOOL_MAX_ITERATIONS:
+            tool_iter += 1
+            log.info("task: %s — tool iteration %d/%d: %s",
+                     task_id, tool_iter, TOOL_MAX_ITERATIONS,
+                     [c.get("type") for c in llm_output["tool_calls"]])
+
+            # Run all requested tools
+            tool_results = tool_runner.execute_all(llm_output["tool_calls"])
+
+            # Append tool results to context as "tool" role message
+            messages = task_context.append(
+                messages,
+                role="tool",
+                content=tool_results,
+                agent="HARNESS",
+            )
+            task_context.save(record_id, messages)
+
+            # Post heartbeat to Feishu so progress is visible
+            tool_types = [c.get("type", "?") for c in llm_output["tool_calls"]]
+            notify.send_agent_update(
+                thread_id=feishu_thread_id,
+                agent_name=owner_agent,
+                msg_type="HEARTBEAT",
+                title=f"工具调用 #{tool_iter}：{', '.join(tool_types)}",
+                fields={"任务ID": task_id, "迭代": f"{tool_iter}/{TOOL_MAX_ITERATIONS}"},
+            )
+
+            # Call LLM again with tool results in context
+            llm_messages = task_context.to_llm_messages(messages)
+            llm_output = llm_call(system_prompt, llm_messages)
+
+        if tool_iter >= TOOL_MAX_ITERATIONS and llm_output.get("tool_calls"):
+            log.warning("task: %s — reached max tool iterations (%d), proceeding without more tools",
+                        task_id, TOOL_MAX_ITERATIONS)
 
         # ── 6. LENS validation ────────────────────────────────────────────────
         val_result = validation.check_status_claim(llm_output)

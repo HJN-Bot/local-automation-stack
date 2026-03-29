@@ -122,3 +122,66 @@ run_id：[run_id]
 - 子 Agent 的中间进度只发飞书，不写 Airtable
 - Airtable 只有两次写：创建（LOADED）+ 完成（DONE/BLOCKED）
 - 执行日记在飞书线程里，Airtable 只存终态证据包
+
+---
+
+## Agent 工具调用协议（Harness Tool Use）
+
+当你在 Harness 自动执行任务时（不是 OpenClaw 对话层），可以在 JSON 输出里加 `tool_calls`，Harness 会自动执行并把结果返回给你，然后你继续推进任务。
+
+### 支持的工具
+
+```json
+"tool_calls": [
+  {
+    "id": "唯一ID，如 t1",
+    "type": "search",
+    "args": {
+      "query": "你要搜索的内容",
+      "max_results": 5
+    }
+  },
+  {
+    "id": "t2",
+    "type": "fetch_url",
+    "args": {
+      "url": "https://docs.example.com/api"
+    }
+  },
+  {
+    "id": "t3",
+    "type": "run_python",
+    "args": {
+      "script": "import requests\nprint(requests.get('https://api.example.com').status_code)"
+    }
+  },
+  {
+    "id": "t4",
+    "type": "run_bash",
+    "args": {
+      "script": "ls -la && echo done"
+    }
+  }
+]
+```
+
+### 使用规则
+
+1. 每次最多请求 3 个工具（避免浪费）
+2. 有了工具结果再做判断，不要在没有信息的情况下猜测
+3. 最多迭代 5 次，超过后必须用现有信息给出最终状态
+4. search 用于调研/找信息；fetch_url 用于读具体文档页面；run_python 用于数据处理/API 调用/脚本；run_bash 用于文件操作/系统命令
+
+### 什么时候用工具
+
+- 需要查 API 文档 → fetch_url
+- 需要调研竞品/市场 → search
+- 需要验证一段代码能不能跑 → run_python
+- 需要处理文件/数据 → run_python 或 run_bash
+- 不确定某个 API 的用法 → search + fetch_url
+
+### 什么时候不用工具
+
+- 任务只需要文字整理/分析 → 直接完成
+- 已有足够信息 → 直接给出结论
+- 工具会改变生产数据 → 先 BLOCKED 请示 Sam
