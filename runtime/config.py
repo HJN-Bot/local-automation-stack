@@ -74,6 +74,17 @@ FEISHU_APP_SECRET_LULU: str     = os.getenv("FEISHU_APP_SECRET_LULU", "")
 FEISHU_APP_ID_ALEX: str         = os.getenv("FEISHU_APP_ID_ALEX", "")
 FEISHU_APP_SECRET_ALEX: str     = os.getenv("FEISHU_APP_SECRET_ALEX", "")
 
+# ── OpenClaw Bridge ───────────────────────────────────────────────────────────
+# When set, task_poller routes agent calls through OpenClaw instead of llm_caller.py
+# Leave blank to keep using llm_caller.py (safe fallback during migration).
+OPENCLAW_API_URL: str       = os.getenv("OPENCLAW_API_URL", "")
+OPENCLAW_API_KEY: str       = os.getenv("OPENCLAW_API_KEY", "")
+# Session IDs for each agent (from OpenClaw session panel)
+OPENCLAW_SESSION_SAM:  str  = os.getenv("OPENCLAW_SESSION_SAM",  "")
+OPENCLAW_SESSION_REX:  str  = os.getenv("OPENCLAW_SESSION_REX",  "")
+OPENCLAW_SESSION_LULU: str  = os.getenv("OPENCLAW_SESSION_LULU", "")
+OPENCLAW_SESSION_ALEX: str  = os.getenv("OPENCLAW_SESSION_ALEX", "")
+
 # ── Tools ─────────────────────────────────────────────────────────────────────
 TAVILY_API_KEY: str         = os.getenv("TAVILY_API_KEY", "")
 CODE_RUNNER_TIMEOUT: int    = int(os.getenv("CODE_RUNNER_TIMEOUT", "30"))   # seconds per script

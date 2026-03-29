@@ -44,7 +44,14 @@ from runtime.config import (
     TOOL_MAX_ITERATIONS,
 )
 import runtime.task_context as _task_context_module
-from runtime.llm_caller import call as llm_call
+from runtime import openclaw_bridge
+from runtime.llm_caller import call as _llm_call
+
+def llm_call(system_prompt: str, messages: list[dict], agent_name: str = "SAM") -> dict:
+    """Route to OpenClaw bridge when configured, else fall back to llm_caller."""
+    if openclaw_bridge.is_available():
+        return openclaw_bridge.call(system_prompt, messages, agent_name=agent_name)
+    return _llm_call(system_prompt, messages)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -129,8 +136,8 @@ def _execute_task(record: dict) -> None:
             goal = raw_context or fresh_fields.get(FIELDS["progress"], "") or "No goal description provided."
             llm_messages = [{"role": "user", "content": f"Begin working on this task: {goal}"}]
 
-        log.info("task: %s — calling LLM (%d messages)", task_id, len(llm_messages))
-        llm_output = llm_call(system_prompt, llm_messages)
+        log.info("task: %s — calling LLM (%d messages, agent=%s)", task_id, len(llm_messages), owner_agent)
+        llm_output = llm_call(system_prompt, llm_messages, agent_name=owner_agent)
 
         # ── 5b. Tool-use loop ─────────────────────────────────────────────────
         # If the LLM requested tools (search / run_python / fetch_url / run_bash),
