@@ -33,7 +33,7 @@ VALID_TRANSITIONS: dict[str, set[str]] = {
     "LOADED":   {"RUNNING"},
     "WAITING":  {"LOADED"},    # parent task: activated by aggregation trigger
     "RUNNING":  {"REVIEW", "DONE", "BLOCKED", "FAILED"},
-    "REVIEW":   {"DONE", "RUNNING"},
+    "REVIEW":   {"DONE", "RUNNING", "BLOCKED"},
     "BLOCKED":  {"RUNNING"},
     "DONE":     set(),
     "FAILED":   set(),

@@ -15,7 +15,9 @@ from dataclasses import dataclass, field
 
 log = logging.getLogger(__name__)
 
-REQUIRED_EVIDENCE_FIELDS = ("run_id", "log_summary", "artifact_link", "writeback_ts")
+# artifact_link is intentionally excluded — many tasks (status checks, messaging)
+# produce no file artifact. null/empty is valid. Other 3 fields are mandatory.
+REQUIRED_EVIDENCE_FIELDS = ("run_id", "log_summary", "writeback_ts")
 
 
 @dataclass

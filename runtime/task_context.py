@@ -161,7 +161,7 @@ def build_system_prompt(task_fields: dict, agent_role: str = "SAM") -> str:
   "evidence": {{
     "run_id": "<unique ID for this run, generate if none>",
     "log_summary": "<1-3 sentences of what happened>",
-    "artifact_link": "<URL or path, or null>",
+    "artifact_link": "<URL or path, or null — optional, leave null if no file produced>",
     "writeback_ts": "<ISO timestamp>"
   }},
   "next_step": "<what should happen next>",
@@ -193,6 +193,6 @@ Example tool_calls:
 - status=RUNNING + tool_calls → harness runs tools, calls you again with results.
 - status=BLOCKED if you cannot proceed even with tools and need human decision.
 - status=DONE only when deliverables are complete AND evidence block is fully populated.
-- NEVER claim DONE without all 4 evidence fields (run_id, log_summary, artifact_link, writeback_ts).
+- NEVER claim DONE without run_id, log_summary, and writeback_ts. artifact_link is optional (null is fine).
 - Omit tool_calls (or leave []) when you don't need tools.
 """

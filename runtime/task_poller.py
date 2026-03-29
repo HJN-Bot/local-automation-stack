@@ -42,6 +42,7 @@ from runtime.config import (
     CLAIMABLE_STATUSES,
     FIELDS,
     TOOL_MAX_ITERATIONS,
+    REVIEW_MAX_RETRIES,
 )
 import runtime.task_context as _task_context_module
 from runtime import openclaw_bridge
@@ -64,6 +65,20 @@ log = logging.getLogger("task_poller")
 
 def _table():
     return Api(AIRTABLE_API_KEY).base(AIRTABLE_BASE_ID).table(TABLE_TASKSTATELOG)
+
+
+def _count_review_retries(messages: list[dict]) -> int:
+    """Count how many times the agent has previously returned REVIEW status."""
+    import json as _json
+    count = 0
+    for m in messages:
+        if m.get("role") == "assistant":
+            try:
+                if _json.loads(m["content"]).get("status") == "REVIEW":
+                    count += 1
+            except Exception:
+                pass
+    return count
 
 
 def _find_claimable_tasks() -> list[dict]:
@@ -121,6 +136,22 @@ def _execute_task(record: dict) -> None:
         # If it's plain text (first-run description), it returns [] and we
         # capture the raw text as the initial goal.
         messages, raw_context = task_context.load_with_raw(record_id)
+
+        # ── 3b. REVIEW retry guard ────────────────────────────────────────────
+        # If this task was picked up from REVIEW status and has already failed
+        # LENS validation too many times, escalate to BLOCKED instead of retrying.
+        if current_status == "REVIEW":
+            review_count = _count_review_retries(messages)
+            if review_count >= REVIEW_MAX_RETRIES:
+                reason = f"LENS 验证连续失败 {review_count} 次，已达上限 ({REVIEW_MAX_RETRIES})，需要人工介入"
+                log.warning("task: %s — REVIEW limit reached (%d/%d), escalating to BLOCKED",
+                            task_id, review_count, REVIEW_MAX_RETRIES)
+                state_machine.transition(record_id, "REVIEW", "BLOCKED",
+                                         extra_fields={FIELDS["blocked_reason"]: reason})
+                notify.send_blocked(task_id, record_id, reason, None, owner_agent,
+                                    thread_id=feishu_thread_id)
+                claimed_status = "BLOCKED"
+                return
 
         # ── 4. Build system prompt ────────────────────────────────────────────
         # Re-fetch fresh fields after status write
@@ -251,9 +282,10 @@ def _execute_task(record: dict) -> None:
         except Exception as inner:
             log.error("task: %s — could not write FAILED: %s", task_id, inner)
     finally:
-        # Always release lock unless REVIEW (we hold to retry immediately next time)
-        if claimed_status not in ("REVIEW",):
-            lock_manager.release(record_id, token)
+        # Always release lock — REVIEW is now a normal claimable state,
+        # next cron cycle will pick it up. Holding the lock was the root
+        # cause of the REVIEW dead-loop bug.
+        lock_manager.release(record_id, token)
 
 
 def _check_aggregation(record_id: str, task_id: str, evidence: dict) -> None:

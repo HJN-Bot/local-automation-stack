@@ -95,7 +95,9 @@ LEASE_DURATION_SECONDS: int = int(os.getenv("LEASE_DURATION_SECONDS", "1800"))
 POLL_INTERVAL_SECONDS: int = int(os.getenv("POLL_INTERVAL_SECONDS", "600"))
 
 # States that the poller should pick up
-CLAIMABLE_STATUSES: list[str] = ["LOADED"]
+CLAIMABLE_STATUSES: list[str] = ["LOADED", "REVIEW"]
+# Max times a task can return REVIEW before being escalated to BLOCKED
+REVIEW_MAX_RETRIES: int = int(os.getenv("REVIEW_MAX_RETRIES", "3"))
 # WAITING = parent task created but not yet claimable; activated by aggregation trigger
 WAITING_STATUS: str = "WAITING"
 # States where harness continues running
