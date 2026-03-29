@@ -48,10 +48,27 @@ LLM_RETRY_MAX: int = int(os.getenv("LLM_RETRY_MAX", "3"))
 DISCORD_BOT_TOKEN: str          = os.getenv("DISCORD_BOT_TOKEN", "")
 DISCORD_NOTIFY_CHANNEL_ID: str  = os.getenv("DISCORD_NOTIFY_CHANNEL_ID", "")
 
-# Feishu — App OpenAPI mode (from ~/.openclaw/secrets/)
+# Feishu — App OpenAPI mode
+# One shared group chat; each agent uses its own App ID/Secret for distinct avatar+name.
+# Per-agent credentials take precedence; falls back to FEISHU_APP_ID/SECRET if not set.
+FEISHU_NOTIFY_CHAT_ID: str      = os.getenv("FEISHU_NOTIFY_CHAT_ID", "")
+
+# Default / fallback bot (used when no agent-specific credential is configured)
 FEISHU_APP_ID: str              = os.getenv("FEISHU_APP_ID", "")
 FEISHU_APP_SECRET: str          = os.getenv("FEISHU_APP_SECRET", "")
-FEISHU_NOTIFY_CHAT_ID: str      = os.getenv("FEISHU_NOTIFY_CHAT_ID", "")
+
+# Per-agent bots — each maps to a separate Feishu self-built app
+FEISHU_APP_ID_ANDREW: str       = os.getenv("FEISHU_APP_ID_ANDREW", "")
+FEISHU_APP_SECRET_ANDREW: str   = os.getenv("FEISHU_APP_SECRET_ANDREW", "")
+
+FEISHU_APP_ID_REX: str          = os.getenv("FEISHU_APP_ID_REX", "")
+FEISHU_APP_SECRET_REX: str      = os.getenv("FEISHU_APP_SECRET_REX", "")
+
+FEISHU_APP_ID_LULU: str         = os.getenv("FEISHU_APP_ID_LULU", "")
+FEISHU_APP_SECRET_LULU: str     = os.getenv("FEISHU_APP_SECRET_LULU", "")
+
+FEISHU_APP_ID_ALEX: str         = os.getenv("FEISHU_APP_ID_ALEX", "")
+FEISHU_APP_SECRET_ALEX: str     = os.getenv("FEISHU_APP_SECRET_ALEX", "")
 
 # ── Harness behaviour ─────────────────────────────────────────────────────────
 LEASE_DURATION_SECONDS: int = int(os.getenv("LEASE_DURATION_SECONDS", "1800"))

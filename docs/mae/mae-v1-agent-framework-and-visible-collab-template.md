@@ -171,85 +171,132 @@ To: <agent>
 
 ## 6. Bot 架构最终决策
 
-### 结论：一个 Bot + 富文本卡片身份标识
+### 结论：4 个独立飞书应用，一个 Agent 一个 Bot
 
-**不推荐「每个 Agent 一个独立 Bot」**的原因：
-- 飞书每个 App 需要独立审批（企业版需走 IT 审核），4 个 agent = 4 次审批
-- 需维护 4 组 App ID/Secret，运维复杂
-- 飞书 API 限速是 App 级别的，分散反而容易踩限制
+飞书的消息气泡显示逻辑是 **App 级别固定**的——头像和名字绑定的是应用本身，单条消息无法覆盖。如果只用一个 Bot，群里所有消息都显示同一个头像，必须点开卡片才能判断是哪个 Agent 在说话，「显影」的目的落空。
 
-**推荐「一个 Bot + 卡片身份」**的实现：
+**正确做法**：4 个独立自建应用，每个 Agent 在群里有自己的头像和名字：
 
-每条消息使用**飞书互动卡片（Interactive Card）**，卡片 header 带 agent 名字和颜色，视觉上每个 agent 都有独立身份，但只用一个 Bot 账号：
+| Agent | 飞书应用名 | 头像 | 卡片颜色 | .env 变量前缀 |
+|-------|---------|-----|---------|-------------|
+| Andrew (SAM) | `Andrew · 主脑` | 🧠 蓝色大脑 | `blue` | `FEISHU_APP_ID_ANDREW` |
+| Rex (FORGE) | `Rex · 工程` | ⚙️ 橙色齿轮 | `orange` | `FEISHU_APP_ID_REX` |
+| Lulu (INK) | `Lulu · 内容` | ✏️ 紫色笔 | `purple` | `FEISHU_APP_ID_LULU` |
+| Alex (AUX) | `Alex · 生活` | 🌿 绿色叶片 | `green` | `FEISHU_APP_ID_ALEX` |
 
-| Agent | 卡片颜色 | header 标识 |
-|-------|---------|------------|
-| Andrew (SAM) | `blue` | 🧠 Andrew · SAM |
-| Rex (FORGE) | `orange` | ⚙️ Rex · FORGE |
-| Lulu (INK) | `purple` | ✏️ Lulu · INK |
-| Alex (AUX) | `green` | 🌿 Alex · AUX |
+群里的效果：
+```
+[Andrew头像] Andrew · 主脑
+  🚀 任务已锁定：信息雷达抓取 → ETA 30min
 
-每个任务的所有消息都发在同一个**飞书话题线程（Thread）**里——SAM 发起 root 消息建立线程，后续所有 Agent 回复到该线程，你打开飞书看到的就是按任务线程分组的清晰对话。
+  [Rex头像] Rex · 工程（回复 Andrew）
+    🟡 Heartbeat：n8n 触发器配置中
+
+  [Lulu头像] Lulu · 内容（回复 Andrew）
+    ✅ DONE：内容草稿已写入飞书文档
+```
+
+**降级策略**：某个 Agent 的专属 App 尚未配置时，代码自动 fallback 到默认的 `FEISHU_APP_ID/SECRET`，不影响任务执行，只是视觉身份退化为通用 Bot。这意味着可以**渐进式上线**——先配 Andrew，其余三个 Agent 先用默认 Bot 顶着，后续补齐。
+
+### 飞书「回复串」≠ Slack Thread
+
+飞书的 `root_id` 机制产生的是**回复气泡**，在群消息列表中默认折叠。建议的使用策略：
+
+```
+主 timeline（扫一眼知道任务进出）
+  ← 只发：任务锁定 / DONE / BLOCKED
+
+回复串 thread（点进去看执行细节）
+  ← Heartbeat、Agent 间 handoff、中间状态
+```
 
 ---
 
 ## 7. 飞书落地技术手册（你需要配置的内容）
 
-### Step 1：创建飞书企业自建应用
+### Step 1：重复 4 次——为每个 Agent 创建独立飞书应用
 
-1. 打开 [飞书开放平台](https://open.feishu.cn/app)
-2. 点击「创建企业自建应用」
-3. 填写应用名称（建议：`MAE-Bot`）和描述
-4. 记录生成的 **App ID** 和 **App Secret**
+打开 [飞书开放平台](https://open.feishu.cn/app)，依次创建：
 
-### Step 2：开通权限
+| 次序 | 应用名 | 应用描述 | 上传头像 |
+|-----|-------|---------|---------|
+| 1 | `Andrew · 主脑` | MAE 主脑 Agent，负责任务规划与协调 | 蓝色脑图标 |
+| 2 | `Rex · 工程` | MAE 工程 Agent，负责执行与构建 | 橙色齿轮 |
+| 3 | `Lulu · 内容` | MAE 内容 Agent，负责写作与输出 | 紫色笔 |
+| 4 | `Alex · 生活` | MAE 辅助 Agent，负责个人与生活支持 | 绿色叶片 |
 
-在应用管理页 → 「权限管理」，开通以下权限：
+每个应用创建后，记录其 **App ID** 和 **App Secret**。
 
-| 权限名 | 权限 Key | 用途 |
-|-------|---------|------|
-| 获取与发送单聊、群组消息 | `im:message` | 发送消息 |
-| 以应用的身份发消息 | `im:message:send_as_bot` | Bot 发言 |
-| 获取群组信息 | `im:chat:readonly` | 获取 chat_id |
-| 发送消息到群组 | `im:message:group:send` | 向群发消息 |
+### Step 2：为每个应用开通相同的权限
 
-### Step 3：发布应用（让 Bot 可以加入群组）
+在每个应用的「权限管理」页面，开通：
 
-1. 应用管理 → 「版本管理与发布」→ 创建新版本
-2. 选择「适用范围」→ 全体成员（或指定你自己）
-3. 申请上线（企业内部 app 通常即审即过）
+| 权限名 | 权限 Key |
+|-------|---------|
+| 获取与发送单聊、群组消息 | `im:message` |
+| 以应用的身份发消息 | `im:message:send_as_bot` |
+| 获取群组信息 | `im:chat:readonly` |
+| 发送消息到群组 | `im:message:group:send` |
 
-### Step 4：创建协作群组
+### Step 3：发布 4 个应用
 
-1. 在飞书客户端创建群组，命名为 `MAE Workspace`（或你喜欢的名字）
-2. 把 `MAE-Bot` 加入群组（群设置 → 机器人 → 添加机器人）
-3. 获取群组的 **Chat ID**：
-   - 方法：在飞书开发者工具调用 `GET /open-apis/im/v1/chats` 查询群列表
-   - 或：群设置页面 URL 中包含 chat_id（`oc_` 开头的字符串）
+每个应用：「版本管理与发布」→ 新建版本 → 申请上线（内部 app 即审即过）。
+
+### Step 4：创建协作群组 + 加入 4 个 Bot
+
+1. 飞书客户端创建群组，命名 `MAE Workspace`
+2. 群设置 → 机器人 → 分别添加 Andrew、Rex、Lulu、Alex 四个 Bot
+3. 获取群组 **Chat ID**（`oc_` 开头）：
+   - 群设置页面 URL 里可以看到
+   - 或调用 `GET /open-apis/im/v1/chats` API 查询
 
 ### Step 5：配置 .env
 
 ```bash
-# 飞书 App OpenAPI 凭证
+# 群组 Chat ID（所有 Bot 发消息到同一个群）
+FEISHU_NOTIFY_CHAT_ID=oc_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# 默认 Bot（fallback，未配置 per-agent 时使用）
 FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx
 FEISHU_APP_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-# 群组 Chat ID（oc_ 开头）
-FEISHU_NOTIFY_CHAT_ID=oc_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# Andrew · 主脑
+FEISHU_APP_ID_ANDREW=cli_xxxxxxxxxxxxxxxx
+FEISHU_APP_SECRET_ANDREW=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Rex · 工程
+FEISHU_APP_ID_REX=cli_xxxxxxxxxxxxxxxx
+FEISHU_APP_SECRET_REX=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Lulu · 内容
+FEISHU_APP_ID_LULU=cli_xxxxxxxxxxxxxxxx
+FEISHU_APP_SECRET_LULU=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Alex · 生活
+FEISHU_APP_ID_ALEX=cli_xxxxxxxxxxxxxxxx
+FEISHU_APP_SECRET_ALEX=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 ### Step 6：验证连通性
 
 ```bash
 cd ~/Desktop/个人开发/MAE-automation/local-automation-stack
+
+# 测试 Andrew Bot
 python3 -c "
-from runtime.notify import send_heartbeat
-send_heartbeat(running_count=0, blocked_count=0)
-print('done')
+from runtime.notify import send_task_start
+tid = send_task_start('test-001', '连通性验证', owner_agent='ANDREW', eta='立即')
+print('Andrew thread_id:', tid)
+"
+
+# 测试 Rex 回复到同一线程
+python3 -c "
+from runtime.notify import send_agent_update
+send_agent_update('替换为上一步的thread_id', 'REX', 'HEARTBEAT', '测试回复', {'状态': '工作中', '步骤': '验证连通'})
 "
 ```
 
-飞书群里收到消息即为成功。
+群里应看到：Andrew Bot 发起一条卡片，Rex Bot 以回复形式跟进。
 
 ---
 
@@ -358,10 +405,13 @@ FEISHU OUTPUT RULES:
 
 ## 10. 推进顺序（可执行 Roadmap）
 
-### Phase 1 — 基础连通（可立即开始）
-- [ ] 完成飞书 App 创建 + 权限申请（约 30 分钟）
-- [ ] 填写 `.env` 中的飞书凭证
-- [ ] 运行连通性验证脚本，确认消息到达群组
+### Phase 1 — 基础连通（约 2 小时，一次性）
+- [ ] 创建 4 个飞书自建应用，上传头像，设置名字（Step 1）
+- [ ] 为每个应用开通权限并发布（Step 2–3）
+- [ ] 创建 MAE Workspace 群，加入 4 个 Bot，获取 chat_id（Step 4）
+- [ ] 填写 `.env` 中的 4 组凭证（Step 5）
+- [ ] 运行连通性验证脚本，确认 Andrew 建线程、Rex 能回复（Step 6）
+- [ ] 可选：先只配 Andrew Bot，其余先 fallback 到默认 Bot，逐步补齐
 
 ### Phase 2 — 升级 notify.py（约 2 小时开发）
 - [ ] 新增 `send_task_start()` 接口（创建线程 + 返回 thread_id）
