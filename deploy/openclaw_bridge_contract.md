@@ -75,12 +75,21 @@ OPENCLAW_SESSION_ALEX=<Alex session ID>
 
 ---
 
-## 需要在 .env 填写的内容
+## 需要填写的 .env 内容
+
+### MAE 侧（local-automation-stack/.env）
 
 ```bash
-# OpenClaw Bridge（填完即切换，留空则继续用 llm_caller.py）
-OPENCLAW_API_URL=https://your-openclaw-instance/api    # OpenClaw API 地址
-OPENCLAW_API_KEY=your-openclaw-api-key                 # 认证 token
+# Adapter URL（填完即切换，留空则继续用 llm_caller.py）
+OPENCLAW_ADAPTER_URL=http://localhost:8765   # adapter 的运行地址
+OPENCLAW_ADAPTER_KEY=your-secret-token      # 可选，留空则不鉴权
+```
+
+### Adapter 侧（adapter 运行环境的 .env）
+
+```bash
+# Adapter 自身鉴权（和 MAE 侧 OPENCLAW_ADAPTER_KEY 保持一致）
+OPENCLAW_ADAPTER_KEY=your-secret-token
 
 # Agent session IDs（在 OpenClaw 的 Sessions 面板里找）
 OPENCLAW_SESSION_SAM=sess_xxxxxxxxxxxxxxxx
@@ -142,14 +151,38 @@ OpenClaw Agent 的 system prompt 里需要加一段，让它们返回 MAE 标准
 
 ---
 
-## OpenClaw API 端点（待确认）
+## Adapter 启动方式
 
-以下端点格式基于 Sam 查到的 OpenClaw docs，上线前需要对照实际 API 验证：
+```bash
+# 在 OpenClaw 运行环境里
+cd local-automation-stack
+pip install -r adapters/requirements.txt
+uvicorn adapters.openclaw_adapter:app --host 0.0.0.0 --port 8765
+```
 
-| 操作 | 端点 | 方法 |
-|-----|------|------|
-| 发消息到现有 session | `/sessions/{session_id}/messages` | POST |
-| 新开子 agent run | `/sessions/spawn` | POST |
-| 查 session 状态 | `/sessions/{session_id}` | GET |
+健康检查：
+```bash
+curl http://localhost:8765/health
+# {"status":"ok","openclaw_available":true,"agents_configured":{...}}
+```
 
-如果实际端点路径不同，只需修改 `runtime/openclaw_bridge.py` 里的 `_sessions_send()` 和 `_sessions_spawn()` 两个函数，其余代码不变。
+## 接入 OpenClaw SDK
+
+打开 `adapters/openclaw_adapter.py`，找到 `# TODO` 注释，把这两行换成你的实际 import：
+
+```python
+# 把这行：
+from openclaw.tools import sessions_send as _sessions_send
+from openclaw.tools import sessions_spawn as _sessions_spawn
+
+# 改成 OpenClaw 实际暴露的 import 路径，例如：
+from openclaw.client import sessions_send as _sessions_send
+from openclaw.client import sessions_spawn as _sessions_spawn
+```
+
+函数签名约定（如果 SDK 签名不同，只需修改 `_do_sessions_send` / `_do_sessions_spawn` 两个函数）：
+
+| 函数 | 期望入参 | 期望返回 |
+|------|---------|---------|
+| `sessions_send` | `session_id: str, content: str` | `{"content": "<reply>"}` |
+| `sessions_spawn` | `agent_id: str, system_prompt: str, messages: list, wait: bool` | `{"output": {"content": "<reply>"}}` |

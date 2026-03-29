@@ -75,15 +75,18 @@ FEISHU_APP_ID_ALEX: str         = os.getenv("FEISHU_APP_ID_ALEX", "")
 FEISHU_APP_SECRET_ALEX: str     = os.getenv("FEISHU_APP_SECRET_ALEX", "")
 
 # ── OpenClaw Bridge ───────────────────────────────────────────────────────────
-# When set, task_poller routes agent calls through OpenClaw instead of llm_caller.py
-# Leave blank to keep using llm_caller.py (safe fallback during migration).
-OPENCLAW_API_URL: str       = os.getenv("OPENCLAW_API_URL", "")
-OPENCLAW_API_KEY: str       = os.getenv("OPENCLAW_API_KEY", "")
-# Session IDs for each agent (from OpenClaw session panel)
-OPENCLAW_SESSION_SAM:  str  = os.getenv("OPENCLAW_SESSION_SAM",  "")
-OPENCLAW_SESSION_REX:  str  = os.getenv("OPENCLAW_SESSION_REX",  "")
-OPENCLAW_SESSION_LULU: str  = os.getenv("OPENCLAW_SESSION_LULU", "")
-OPENCLAW_SESSION_ALEX: str  = os.getenv("OPENCLAW_SESSION_ALEX", "")
+# When set, task_poller routes agent calls through the OpenClaw adapter instead
+# of llm_caller.py. Leave blank to keep using llm_caller.py (safe fallback).
+#
+# OPENCLAW_ADAPTER_URL  — URL of the thin adapter server running inside OpenClaw
+#                         context (see adapters/openclaw_adapter.py).
+#                         e.g. http://localhost:8765  or  https://your-adapter/
+# OPENCLAW_ADAPTER_KEY  — Optional bearer token to authenticate adapter calls.
+#
+# Session IDs belong in the adapter's own .env, not here.
+# MAE only needs to know where the adapter is.
+OPENCLAW_ADAPTER_URL: str = os.getenv("OPENCLAW_ADAPTER_URL", "")
+OPENCLAW_ADAPTER_KEY: str = os.getenv("OPENCLAW_ADAPTER_KEY", "")
 
 # ── Tools ─────────────────────────────────────────────────────────────────────
 TAVILY_API_KEY: str         = os.getenv("TAVILY_API_KEY", "")
