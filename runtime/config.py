@@ -30,10 +30,12 @@ FIELDS = {
     "artifact_links":     "ArtifactLinks",
     "task_context":       "TaskContext",
     "source":             "Source",
-    # NEW — must be added to Airtable before use (see deploy/airtable_schema_patch.md)
+    # Lock fields — must be added to Airtable (see deploy/airtable_schema_patch.md)
     "lock_token":         "LockToken",
     "lease_until":        "LeaseUntil",
     "lease_owner":        "LeaseOwner",
+    # Feishu thread anchor — written by task_creator, read by task_poller for threaded notify
+    "feishu_thread_id":   "FeishuThreadId",
 }
 
 # ── LLM ───────────────────────────────────────────────────────────────────────

@@ -74,7 +74,11 @@ def _execute_task(record: dict) -> None:
     current_status = fields.get(FIELDS["status"], "LOADED")
     owner_agent = fields.get(FIELDS["owner_agent"], "SAM")
 
-    log.info("task: %s | status: %s | agent: %s", task_id, current_status, owner_agent)
+    # Read feishu_thread_id early — used for all notify calls in this task
+    feishu_thread_id: str | None = fields.get(FIELDS["feishu_thread_id"]) or None
+
+    log.info("task: %s | status: %s | agent: %s | feishu_thread: %s",
+             task_id, current_status, owner_agent, feishu_thread_id or "none")
 
     # ── 1. Claim lock ────────────────────────────────────────────────────────
     token = lock_manager.claim(record_id)
@@ -91,6 +95,15 @@ def _execute_task(record: dict) -> None:
             current_status,
             "RUNNING",
             extra_fields={FIELDS["run_id"]: run_id},
+        )
+
+        # Notify Feishu that this task has been picked up by the harness
+        notify.send_agent_update(
+            thread_id=feishu_thread_id,
+            agent_name=owner_agent,
+            msg_type="HEARTBEAT",
+            title="任务已认领，开始执行",
+            fields={"任务ID": task_id, "run_id": run_id, "执行者": owner_agent},
         )
 
         # ── 3. Load task_context ──────────────────────────────────────────────
@@ -153,7 +166,8 @@ def _execute_task(record: dict) -> None:
         if claimed_status == "DONE":
             extra[FIELDS["artifact_links"]] = evidence.get("artifact_link") or ""
             state_machine.transition(record_id, "RUNNING", "DONE", extra_fields=extra)
-            notify.send_done(task_id, record_id, evidence, owner_agent)
+            notify.send_done(task_id, record_id, evidence, owner_agent,
+                             thread_id=feishu_thread_id)
             log.info("task: %s — DONE", task_id)
 
         elif claimed_status == "BLOCKED":
@@ -162,7 +176,8 @@ def _execute_task(record: dict) -> None:
             extra[FIELDS["blocked_reason"]] = blocked_reason
             extra[FIELDS["next_recovery_step"]] = recovery or ""
             state_machine.transition(record_id, "RUNNING", "BLOCKED", extra_fields=extra)
-            notify.send_blocked(task_id, record_id, blocked_reason, recovery, owner_agent)
+            notify.send_blocked(task_id, record_id, blocked_reason, recovery, owner_agent,
+                                thread_id=feishu_thread_id)
             log.info("task: %s — BLOCKED: %s", task_id, blocked_reason)
 
         elif claimed_status == "REVIEW":
