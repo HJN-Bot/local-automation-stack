@@ -43,6 +43,7 @@ from runtime.config import (
     FIELDS,
     TOOL_MAX_ITERATIONS,
 )
+import runtime.task_context as _task_context_module
 from runtime.llm_caller import call as llm_call
 
 logging.basicConfig(
@@ -212,6 +213,7 @@ def _execute_task(record: dict) -> None:
             notify.send_done(task_id, record_id, evidence, owner_agent,
                              thread_id=feishu_thread_id)
             log.info("task: %s — DONE", task_id)
+            _check_aggregation(record_id, task_id, evidence)
 
         elif claimed_status == "BLOCKED":
             blocked_reason = llm_output.get("blocked_reason", "Unknown")
@@ -222,6 +224,7 @@ def _execute_task(record: dict) -> None:
             notify.send_blocked(task_id, record_id, blocked_reason, recovery, owner_agent,
                                 thread_id=feishu_thread_id)
             log.info("task: %s — BLOCKED: %s", task_id, blocked_reason)
+            _check_aggregation(record_id, task_id, evidence)
 
         elif claimed_status == "REVIEW":
             state_machine.transition(record_id, "RUNNING", "REVIEW", extra_fields=extra)
@@ -244,6 +247,75 @@ def _execute_task(record: dict) -> None:
         # Always release lock unless REVIEW (we hold to retry immediately next time)
         if claimed_status not in ("REVIEW",):
             lock_manager.release(record_id, token)
+
+
+def _check_aggregation(record_id: str, task_id: str, evidence: dict) -> None:
+    """
+    Called after a sub-task reaches DONE/BLOCKED.
+    If this task has a parent and all siblings are now terminal,
+    appends a result summary to the parent context and activates it (WAITING→LOADED).
+    """
+    tbl = _table()
+    record = tbl.get(record_id)
+    parent_record_id = record.get("fields", {}).get(FIELDS["parent_task_id"])
+    if not parent_record_id:
+        return  # not a sub-task, nothing to aggregate
+
+    # Find all siblings (same parent)
+    siblings = tbl.all(formula=f"{{{FIELDS['parent_task_id']}}} = '{parent_record_id}'")
+    terminal = {"DONE", "BLOCKED", "FAILED"}
+    statuses = [s.get("fields", {}).get(FIELDS["status"], "") for s in siblings]
+
+    if not all(s in terminal for s in statuses):
+        remaining = sum(1 for s in statuses if s not in terminal)
+        log.info("aggregation: %s done, %d sibling(s) still running — waiting", task_id, remaining)
+        return
+
+    # All sub-tasks terminal — write each result into parent context then activate
+    log.info("aggregation: all sub-tasks terminal for parent %s — activating", parent_record_id)
+    parent_messages, _ = _task_context_module.load_with_raw(parent_record_id)
+
+    for sib in siblings:
+        sib_fields  = sib.get("fields", {})
+        sib_task_id = sib_fields.get(FIELDS["task_id"], sib["id"])
+        sib_status  = sib_fields.get(FIELDS["status"], "?")
+        # Pull log_summary from the last assistant message in sibling's context
+        sib_msgs, _ = _task_context_module.load_with_raw(sib["id"])
+        sib_summary = evidence.get("log_summary", "—") if sib["id"] == record_id else "—"
+        for msg in reversed(sib_msgs):
+            if msg.get("role") == "assistant":
+                import json as _json
+                try:
+                    parsed = _json.loads(msg["content"])
+                    sib_summary = parsed.get("evidence", {}).get("log_summary", "—")
+                except Exception:
+                    pass
+                break
+        parent_messages = _task_context_module.append(
+            parent_messages,
+            role="user",
+            content=f"[Sub-task result] {sib_task_id} ({sib_status}): {sib_summary}",
+            agent=sib_task_id,
+        )
+
+    _task_context_module.save(parent_record_id, parent_messages)
+    tbl.update(parent_record_id, {
+        FIELDS["status"]:     "LOADED",
+        FIELDS["updated_at"]: datetime.now(timezone.utc).isoformat(),
+    })
+
+    # Notify Feishu that all sub-tasks are done and aggregation is starting
+    parent_fields   = tbl.get(parent_record_id).get("fields", {})
+    parent_thread   = parent_fields.get(FIELDS["feishu_thread_id"]) or None
+    parent_task_id  = parent_fields.get(FIELDS["task_id"], parent_record_id)
+    notify.send_agent_update(
+        thread_id=parent_thread,
+        agent_name="SAM",
+        msg_type="HEARTBEAT",
+        title="所有子任务完成，Sam 开始汇总",
+        fields={"任务ID": parent_task_id, "子任务数": str(len(siblings))},
+    )
+    log.info("aggregation: parent %s activated (LOADED)", parent_record_id)
 
 
 def run_once() -> None:

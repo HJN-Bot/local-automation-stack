@@ -36,6 +36,8 @@ FIELDS = {
     "lease_owner":        "LeaseOwner",
     # Feishu thread anchor — written by task_creator, read by task_poller for threaded notify
     "feishu_thread_id":   "FeishuThreadId",
+    # Multi-agent plan — sub-tasks point to their parent task record ID
+    "parent_task_id":     "ParentTaskId",
 }
 
 # ── LLM ───────────────────────────────────────────────────────────────────────
@@ -83,6 +85,8 @@ POLL_INTERVAL_SECONDS: int = int(os.getenv("POLL_INTERVAL_SECONDS", "600"))
 
 # States that the poller should pick up
 CLAIMABLE_STATUSES: list[str] = ["LOADED"]
+# WAITING = parent task created but not yet claimable; activated by aggregation trigger
+WAITING_STATUS: str = "WAITING"
 # States where harness continues running
 RUNNING_STATUSES: list[str] = ["RUNNING"]
 # Terminal states — harness stops

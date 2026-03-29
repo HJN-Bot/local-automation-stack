@@ -31,6 +31,7 @@ log = logging.getLogger(__name__)
 
 VALID_TRANSITIONS: dict[str, set[str]] = {
     "LOADED":   {"RUNNING"},
+    "WAITING":  {"LOADED"},    # parent task: activated by aggregation trigger
     "RUNNING":  {"REVIEW", "DONE", "BLOCKED", "FAILED"},
     "REVIEW":   {"DONE", "RUNNING"},
     "BLOCKED":  {"RUNNING"},

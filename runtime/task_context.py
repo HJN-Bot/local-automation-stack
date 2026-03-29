@@ -144,11 +144,11 @@ def build_system_prompt(task_fields: dict, agent_role: str = "SAM") -> str:
     Build the minimal, task-specific system prompt injected into LLM calls.
     Follows MAE cognitive-layer principle: inject only what's relevant.
     """
-    task_id = task_fields.get(FIELDS["task_id"], "unknown")
+    task_id  = task_fields.get(FIELDS["task_id"], "unknown")
     progress = task_fields.get(FIELDS["progress"], "")
-    owner = task_fields.get(FIELDS["owner_agent"], agent_role)
+    owner    = task_fields.get(FIELDS["owner_agent"], agent_role)
 
-    return f"""You are {owner}, executing task {task_id}.
+    return f"""You are {owner}, executing task {task_id} inside the MAE multi-agent harness.
 
 ## Your current mission
 {progress or "(no description yet — determine from context)"}
@@ -157,6 +157,7 @@ def build_system_prompt(task_fields: dict, agent_role: str = "SAM") -> str:
 {{
   "status": "RUNNING | DONE | BLOCKED | REVIEW",
   "action_taken": "<what you just did>",
+  "tool_calls": [],
   "evidence": {{
     "run_id": "<unique ID for this run, generate if none>",
     "log_summary": "<1-3 sentences of what happened>",
@@ -169,10 +170,29 @@ def build_system_prompt(task_fields: dict, agent_role: str = "SAM") -> str:
   "next_recovery_step": null
 }}
 
+## Tools available (add to tool_calls when needed)
+You can request tools by populating the tool_calls array. The harness will run them
+and give you the results before your next response.
+
+| type         | args required          | when to use                                  |
+|--------------|------------------------|----------------------------------------------|
+| search       | query, max_results?    | research, find info, look up APIs            |
+| fetch_url    | url                    | read a specific doc page, README, blog post  |
+| run_python   | script, timeout?       | process data, call APIs, run calculations    |
+| run_bash     | script, timeout?       | file ops, system commands, check env         |
+
+Example tool_calls:
+[
+  {{"id": "t1", "type": "search",   "args": {{"query": "Feishu API send card message"}}}},
+  {{"id": "t2", "type": "run_python","args": {{"script": "import requests\\nprint(requests.get('https://httpbin.org/get').status_code)"}}}}
+]
+
 ## Rules
-- If you cannot make progress without human input: set status=BLOCKED, needs_human=true.
-- If all deliverables are complete and evidence is ready: set status=DONE.
-- If output needs review before DONE: set status=REVIEW.
-- Otherwise: status=RUNNING, describe what you did and next_step.
-- NEVER claim DONE without a complete evidence block (all 4 fields populated).
+- Use tools when you need external information or to run code — don't guess.
+- Max 3 tool calls per response; max 5 tool-use iterations total per task cycle.
+- status=RUNNING + tool_calls → harness runs tools, calls you again with results.
+- status=BLOCKED if you cannot proceed even with tools and need human decision.
+- status=DONE only when deliverables are complete AND evidence block is fully populated.
+- NEVER claim DONE without all 4 evidence fields (run_id, log_summary, artifact_link, writeback_ts).
+- Omit tool_calls (or leave []) when you don't need tools.
 """
