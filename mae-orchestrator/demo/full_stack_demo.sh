@@ -196,7 +196,7 @@ if [ "$MODE" = "gh" ] || [ "$MODE" = "full" ]; then
         echo -e "  ${YELLOW}   登录: gh auth login${NC}"
     else
         # Find or create demo repo
-        DEMO_REPO="jianan/mae-fullstack-demo"
+        DEMO_REPO="Jianan-Huang0609/mae-fullstack-demo"
         
         if gh repo view "$DEMO_REPO" &>/dev/null 2>&1; then
             echo -e "  ${GREEN}Demo repo:${NC} github.com/$DEMO_REPO (已存在)"
