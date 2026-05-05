@@ -1,0 +1,2 @@
+{"event": "receiver_start", "host": "127.0.0.1", "port": 18889, "ts_ms": 1777562625509}
+{"client": "127.0.0.1", "event": "http", "message": "\"GET /health HTTP/1.1\" 200 -", "ts_ms": 1777562625851}

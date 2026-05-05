@@ -174,6 +174,9 @@ def _execute_task(record: dict) -> None:
         # If the LLM requested tools (search / run_python / fetch_url / run_bash),
         # execute them and call the LLM again with the results.
         # Repeat up to TOOL_MAX_ITERATIONS times, then proceed with final output.
+        #
+        # P1-1 fix: accumulate messages in memory only; save once after loop ends.
+        # Previously each iteration wrote to Airtable (up to 7+ writes per task).
         tool_iter = 0
         while llm_output.get("tool_calls") and tool_iter < TOOL_MAX_ITERATIONS:
             tool_iter += 1
@@ -184,14 +187,13 @@ def _execute_task(record: dict) -> None:
             # Run all requested tools
             tool_results = tool_runner.execute_all(llm_output["tool_calls"])
 
-            # Append tool results to context as "tool" role message
+            # Accumulate in memory only — save once after loop
             messages = task_context.append(
                 messages,
                 role="tool",
                 content=tool_results,
                 agent="HARNESS",
             )
-            task_context.save(record_id, messages)
 
             # Post heartbeat to Feishu so progress is visible
             tool_types = [c.get("type", "?") for c in llm_output["tool_calls"]]
@@ -228,7 +230,9 @@ def _execute_task(record: dict) -> None:
                 "Complete the evidence and respond DONE again."
             )
 
-        # ── 7. Append LLM response to context, save ───────────────────────────
+        # ── 7. Append LLM response to context, save once ──────────────────────
+        # Single save after tool loop + LLM output — no intermediate writes.
+        # Tool results were accumulated in-memory during the loop above (P1-1).
         messages = task_context.append(
             messages,
             role="assistant",
@@ -262,6 +266,23 @@ def _execute_task(record: dict) -> None:
             notify.send_blocked(task_id, record_id, blocked_reason, recovery, owner_agent,
                                 thread_id=feishu_thread_id)
             log.info("task: %s — BLOCKED: %s", task_id, blocked_reason)
+
+            # P1-2 fix: agent proactively asks user what info is needed to unblock
+            notify.send_agent_update(
+                thread_id=feishu_thread_id,
+                agent_name=owner_agent,
+                msg_type="BLOCKED",
+                title="需要你的帮助才能继续 ⚠️",
+                fields={
+                    "任务ID": task_id,
+                    "卡点": blocked_reason,
+                    "解锁方式": (
+                        f"在 Discord 或飞书回复，说明：{recovery}"
+                        if recovery else "请提供更多信息或指示下一步方向"
+                    ),
+                },
+            )
+
             _check_aggregation(record_id, task_id, evidence)
 
         elif claimed_status == "REVIEW":

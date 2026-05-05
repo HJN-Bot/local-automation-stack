@@ -1,0 +1,1 @@
+Codex CLI 优先考虑深度集成，OpenClaw 强调模块化设计，Claude Code 专注于自然语言交互。
