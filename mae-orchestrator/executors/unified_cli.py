@@ -54,7 +54,7 @@ def _decide_cli(content: str) -> str:
 # ── CLI invocation ───────────────────────────────────────────────────
 def _run_codex(prompt: str, cwd: str, timeout: int = 300) -> tuple[int, str, str]:
     """Run Codex CLI. Returns (exit_code, stdout, stderr)."""
-    cmd = ["codex", "exec", prompt]
+    cmd = ["codex", "exec", "--skip-git-repo-check", "--sandbox", "workspace-write", "--full-auto", prompt]
     proc = subprocess.run(
         cmd,
         capture_output=True,
@@ -67,7 +67,7 @@ def _run_codex(prompt: str, cwd: str, timeout: int = 300) -> tuple[int, str, str
 
 def _run_claude(prompt: str, cwd: str, timeout: int = 300) -> tuple[int, str, str]:
     """Run Claude CLI. Returns (exit_code, stdout, stderr)."""
-    cmd = ["claude", "-p", prompt, "--max-turns", "5"]
+    cmd = ["claude", "-p", prompt, "--max-turns", "5", "--permission-mode", "bypassPermissions"]
     proc = subprocess.run(
         cmd,
         capture_output=True,
