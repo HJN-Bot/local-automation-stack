@@ -1,5 +1,62 @@
 # CHANGELOG
 
+## 2026-05-06 — P2 可扩展性修复
+
+### P2-3: 结构化日志（JSON + task_id 注入）
+
+**修改原因**
+所有日志为纯文本，task_id 混在消息字符串里。无法用 `jq '.task_id'` 过滤或接入 Datadog/Loki/CloudWatch 等日志系统。每行日志都有一个 task_id，但它是"消息内容的一部分"而非"结构化字段"。
+
+**修改方法**
+- 文件：`runtime/task_poller.py`
+- 新增 `_StructuredFormatter`：terminal 环境输出人类可读文本，cron/pipe 环境输出 JSON（自动检测 `sys.stderr.isatty()`）
+- `_execute_task` 启动时创建 `logging.LoggerAdapter(log, {"task_id": task_id})`，函数内所有 `_log.info()` 自动携带 task_id 字段
+- 输出示例（非terminal）：`{"ts":"2026-05-06T08:00:00Z","level":"INFO","logger":"task_poller","msg":"status: RUNNING | agent: SAM | feishu_thread: om_xxx","task_id":"task-20260506-0800-abcd"}`
+
+**是否验证**
+- ✅ 代码审查通过：`LoggerAdapter` 是 Python 标准库组件，行为稳定
+- ✅ 终端/非终端两路已测试（两个 branch 各走对格式化方式）
+- ⚠️ 未在实际 cron 环境跑完整性测试
+
+---
+
+### P2-1: 聚合时直接从 Airtable fields 提取 summary（零额外 API）
+
+**修改原因**
+`_check_aggregation()` 中对每个兄弟子任务分别调用 `load_with_raw(sib["id"])`，N 个子任务 = N 次额外 Airtable API 调用。但 `tbl.all()` 已经返回了所有 fields（包括 TaskContext JSON）。
+
+**修改方法**
+- 文件：`runtime/task_poller.py`
+- 从 `sib_fields[FIELDS["task_context"]]` 直接解析 JSON（已在 `tbl.all()` 返回中），不再调用 `load_with_raw()`
+- BLOCKED/FAILED 的兄弟优先用 `blocked_reason` 字段作为 summary
+- 当前子任务优先用传入的 `evidence["log_summary"]`
+- N 次 API 调用 → 0 次额外 API 调用
+
+**是否验证**
+- ✅ 代码审查通过：`tbl.all()` 返回所有字段（Airtable API 默认行为），TaskContext 字段存在且格式正确
+- ✅ 逻辑等价：提取 summary 的路径一致（找最后一条 assistant 消息 → 解析 evidence.log_summary）
+- ⚠️ 未在实际多子任务场景做端到端测试
+
+---
+
+### P2-2: sessions_send system_prompt 注入位置优化
+
+**修改原因**
+`sessions_send` 不支持独立传 system_prompt（仅 sessions_spawn 支持）。MAE 的 system_prompt 被嵌入用户消息体作为 `[TASK CONTEXT]`，优先级低于 agent 自身的系统指令。
+
+**修改方法**
+- 文件：`adapters/openclaw_adapter.py`
+- `[TASK CONTEXT]` → `[HIGH-PRIORITY TASK — execute these instructions as your primary objective]`
+- 添加完整文档注释说明限制，引用 `deploy/sam_openclaw_system_prompt.md`
+- Agent 的 OpenClaw system prompt 建议加入："当收到以 [HIGH-PRIORITY TASK] 开头的消息时，将其指令作为首要目标执行"
+
+**是否验证**
+- ✅ 代码审查通过：纯文本格式变更，不影响协议结构
+- ⚠️ 需手动更新 OpenClaw agent 的 system prompt（见 deploy/sam_openclaw_system_prompt.md）
+- ⚠️ 未在真实 sessions_send 链路测试
+
+---
+
 ## 2026-05-06 — P1 可靠性修复
 
 ### P1-1: 减少 Airtable 写入次数（工具循环优化）

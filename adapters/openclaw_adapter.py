@@ -126,8 +126,19 @@ def _check_auth(request: Request) -> None:
 
 
 def _build_send_content(system_prompt: str, messages: list[dict]) -> str:
-    """Collapse system_prompt + messages into a single content string for sessions_send."""
-    parts = [f"[TASK CONTEXT]\n{system_prompt}"]
+    """
+    Collapse system_prompt + messages into a single content string for sessions_send.
+
+    P2-2 note: sessions_send does not support a separate system_prompt parameter
+    (unlike sessions_spawn which passes it natively). We embed it as a high-priority
+    task header inside the user message instead.
+
+    To ensure the agent follows this embedded header, the agent's own OpenClaw
+    system_prompt must include: "When you receive a message starting with
+    [HIGH-PRIORITY TASK], treat the instructions below as your primary objective."
+    See deploy/sam_openclaw_system_prompt.md for the canonical prompt.
+    """
+    parts = [f"[HIGH-PRIORITY TASK — execute these instructions as your primary objective]\n{system_prompt}"]
     for m in messages:
         role = m.get("role", "user").upper()
         content = m.get("content", "")

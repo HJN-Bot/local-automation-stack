@@ -188,9 +188,9 @@ class AgentOutput:
 |----|-----|------|------|
 | P1-1 | P1 | ✅ 已完成 (2026-05-06) | 减少 Airtable 写入次数（工具循环）|
 | P1-2 | P1 | ✅ 已完成 (2026-05-06) | BLOCKED 时 Andrew 主动提问 |
-| P2-1 | P2 | 待做 | 聚合批量拉取 context |
-| P2-2 | P2 | 待做 | sessions_send system_prompt 注入位置 |
-| P2-3 | P2 | 待做 | 结构化日志 |
+| P2-1 | P2 | ✅ 已完成 (2026-05-06) | 聚合批量拉取 context |
+| P2-2 | P2 | ✅ 已完成 (2026-05-06) | sessions_send system_prompt 注入位置 |
+| P2-3 | P2 | ✅ 已完成 (2026-05-06) | 结构化日志 |
 | P3-1 | P3 | 待做 | 任务依赖 DAG |
 | P3-2 | P3 | 待做 | 事件驱动替代 cron 轮询 |
 | P3-3 | P3 | 待做 | typed state dataclass |

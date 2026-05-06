@@ -102,13 +102,16 @@ def _execute_task(record: dict) -> None:
     # Read feishu_thread_id early — used for all notify calls in this task
     feishu_thread_id: str | None = fields.get(FIELDS["feishu_thread_id"]) or None
 
-    log.info("task: %s | status: %s | agent: %s | feishu_thread: %s",
-             task_id, current_status, owner_agent, feishu_thread_id or "none")
+    # P2-3: structured logging — inject task_id into every log line within this task
+    _log = logging.LoggerAdapter(log, {"task_id": task_id})
+
+    _log.info("status: %s | agent: %s | feishu_thread: %s",
+              current_status, owner_agent, feishu_thread_id or "none")
 
     # ── 1. Claim lock ────────────────────────────────────────────────────────
     token = lock_manager.claim(record_id)
     if token is None:
-        log.info("task: %s skipped — locked by another process", task_id)
+        _log.info("task: %s skipped — locked by another process", task_id)
         return
 
     claimed_status = "FAILED"  # default — overwritten on success
@@ -144,7 +147,7 @@ def _execute_task(record: dict) -> None:
             review_count = _count_review_retries(messages)
             if review_count >= REVIEW_MAX_RETRIES:
                 reason = f"LENS 验证连续失败 {review_count} 次，已达上限 ({REVIEW_MAX_RETRIES})，需要人工介入"
-                log.warning("task: %s — REVIEW limit reached (%d/%d), escalating to BLOCKED",
+                _log.warning("task: %s — REVIEW limit reached (%d/%d), escalating to BLOCKED",
                             task_id, review_count, REVIEW_MAX_RETRIES)
                 state_machine.transition(record_id, "REVIEW", "BLOCKED",
                                          extra_fields={FIELDS["blocked_reason"]: reason})
@@ -167,7 +170,7 @@ def _execute_task(record: dict) -> None:
             goal = raw_context or fresh_fields.get(FIELDS["progress"], "") or "No goal description provided."
             llm_messages = [{"role": "user", "content": f"Begin working on this task: {goal}"}]
 
-        log.info("task: %s — calling LLM (%d messages, agent=%s)", task_id, len(llm_messages), owner_agent)
+        _log.info("task: %s — calling LLM (%d messages, agent=%s)", task_id, len(llm_messages), owner_agent)
         llm_output = llm_call(system_prompt, llm_messages, agent_name=owner_agent)
 
         # ── 5b. Tool-use loop ─────────────────────────────────────────────────
@@ -180,7 +183,7 @@ def _execute_task(record: dict) -> None:
         tool_iter = 0
         while llm_output.get("tool_calls") and tool_iter < TOOL_MAX_ITERATIONS:
             tool_iter += 1
-            log.info("task: %s — tool iteration %d/%d: %s",
+            _log.info("task: %s — tool iteration %d/%d: %s",
                      task_id, tool_iter, TOOL_MAX_ITERATIONS,
                      [c.get("type") for c in llm_output["tool_calls"]])
 
@@ -210,7 +213,7 @@ def _execute_task(record: dict) -> None:
             llm_output = llm_call(system_prompt, llm_messages)
 
         if tool_iter >= TOOL_MAX_ITERATIONS and llm_output.get("tool_calls"):
-            log.warning("task: %s — reached max tool iterations (%d), proceeding without more tools",
+            _log.warning("task: %s — reached max tool iterations (%d), proceeding without more tools",
                         task_id, TOOL_MAX_ITERATIONS)
 
         # ── 6. LENS validation ────────────────────────────────────────────────
@@ -218,7 +221,7 @@ def _execute_task(record: dict) -> None:
         claimed_status = llm_output["status"]
 
         if claimed_status == "DONE" and not val_result:
-            log.warning(
+            _log.warning(
                 "task: %s — LLM claimed DONE but evidence_pack failed: %s",
                 task_id, val_result.reason,
             )
@@ -254,7 +257,7 @@ def _execute_task(record: dict) -> None:
             state_machine.transition(record_id, "RUNNING", "DONE", extra_fields=extra)
             notify.send_done(task_id, record_id, evidence, owner_agent,
                              thread_id=feishu_thread_id)
-            log.info("task: %s — DONE", task_id)
+            _log.info("task: %s — DONE", task_id)
             _check_aggregation(record_id, task_id, evidence)
 
         elif claimed_status == "BLOCKED":
@@ -265,7 +268,7 @@ def _execute_task(record: dict) -> None:
             state_machine.transition(record_id, "RUNNING", "BLOCKED", extra_fields=extra)
             notify.send_blocked(task_id, record_id, blocked_reason, recovery, owner_agent,
                                 thread_id=feishu_thread_id)
-            log.info("task: %s — BLOCKED: %s", task_id, blocked_reason)
+            _log.info("task: %s — BLOCKED: %s", task_id, blocked_reason)
 
             # P1-2 fix: agent proactively asks user what info is needed to unblock
             notify.send_agent_update(
@@ -287,21 +290,21 @@ def _execute_task(record: dict) -> None:
 
         elif claimed_status == "REVIEW":
             state_machine.transition(record_id, "RUNNING", "REVIEW", extra_fields=extra)
-            log.info("task: %s — REVIEW (will retry next cycle)", task_id)
+            _log.info("task: %s — REVIEW (will retry next cycle)", task_id)
 
         else:  # RUNNING — release and wait for next cron
             state_machine.transition(record_id, "RUNNING", "RUNNING", extra_fields=extra)
-            log.info("task: %s — still RUNNING, next_step: %s", task_id, llm_output.get("next_step"))
+            _log.info("task: %s — still RUNNING, next_step: %s", task_id, llm_output.get("next_step"))
 
     except Exception as exc:
-        log.error("task: %s — unhandled error: %s", task_id, exc, exc_info=True)
+        _log.error("task: %s — unhandled error: %s", task_id, exc, exc_info=True)
         try:
             state_machine.force_status(
                 record_id, "FAILED",
                 extra_fields={FIELDS["blocked_reason"]: str(exc)},
             )
         except Exception as inner:
-            log.error("task: %s — could not write FAILED: %s", task_id, inner)
+            _log.error("task: %s — could not write FAILED: %s", task_id, inner)
     finally:
         # Always release lock — REVIEW is now a normal claimable state,
         # next cron cycle will pick it up. Holding the lock was the root
@@ -314,43 +317,67 @@ def _check_aggregation(record_id: str, task_id: str, evidence: dict) -> None:
     Called after a sub-task reaches DONE/BLOCKED.
     If this task has a parent and all siblings are now terminal,
     appends a result summary to the parent context and activates it (WAITING→LOADED).
+
+    P2-1 fix: extracts sibling summaries from already-loaded Airtable fields
+    (tbl.all returns all fields including TaskContext JSON).
+    Previously N extra load_with_raw() calls per aggregation — now zero.
     """
+    _agg_log = logging.LoggerAdapter(log, {"task_id": task_id})
+
     tbl = _table()
     record = tbl.get(record_id)
     parent_record_id = record.get("fields", {}).get(FIELDS["parent_task_id"])
     if not parent_record_id:
         return  # not a sub-task, nothing to aggregate
 
-    # Find all siblings (same parent)
+    # Find all siblings (same parent) — tbl.all() returns all fields including
+    # TaskContext JSON, so we can extract summaries without extra API calls.
     siblings = tbl.all(formula=f"{{{FIELDS['parent_task_id']}}} = '{parent_record_id}'")
     terminal = {"DONE", "BLOCKED", "FAILED"}
     statuses = [s.get("fields", {}).get(FIELDS["status"], "") for s in siblings]
 
     if not all(s in terminal for s in statuses):
         remaining = sum(1 for s in statuses if s not in terminal)
-        log.info("aggregation: %s done, %d sibling(s) still running — waiting", task_id, remaining)
+        _agg_log.info("aggregation: %d sibling(s) still running — waiting", remaining)
         return
 
     # All sub-tasks terminal — write each result into parent context then activate
-    log.info("aggregation: all sub-tasks terminal for parent %s — activating", parent_record_id)
+    _agg_log.info("aggregation: all sub-tasks terminal for parent %s — activating", parent_record_id)
     parent_messages, _ = _task_context_module.load_with_raw(parent_record_id)
 
     for sib in siblings:
         sib_fields  = sib.get("fields", {})
         sib_task_id = sib_fields.get(FIELDS["task_id"], sib["id"])
         sib_status  = sib_fields.get(FIELDS["status"], "?")
-        # Pull log_summary from the last assistant message in sibling's context
-        sib_msgs, _ = _task_context_module.load_with_raw(sib["id"])
-        sib_summary = evidence.get("log_summary", "—") if sib["id"] == record_id else "—"
-        for msg in reversed(sib_msgs):
-            if msg.get("role") == "assistant":
-                import json as _json
-                try:
-                    parsed = _json.loads(msg["content"])
-                    sib_summary = parsed.get("evidence", {}).get("log_summary", "—")
-                except Exception:
-                    pass
-                break
+
+        # P2-1: extract summary from already-loaded TaskContext field (zero extra API)
+        # Previously did N separate load_with_raw() calls.
+        sib_summary = "—"
+        sib_context_raw = sib_fields.get(FIELDS["task_context"], "")
+        if sib_context_raw:
+            try:
+                sib_msgs = _json.loads(sib_context_raw) if isinstance(sib_context_raw, str) else sib_context_raw
+                if isinstance(sib_msgs, list):
+                    for msg in reversed(sib_msgs):
+                        if msg.get("role") == "assistant":
+                            content = msg.get("content", "")
+                            try:
+                                parsed = _json.loads(content) if isinstance(content, str) else content
+                                sib_summary = parsed.get("evidence", {}).get("log_summary", "—")
+                            except Exception:
+                                pass
+                            break
+            except Exception:
+                pass
+
+        # If the current sub-task's evidence has a log_summary, use it
+        if sib["id"] == record_id and evidence.get("log_summary"):
+            sib_summary = evidence["log_summary"]
+
+        # BLOCKED/FAILED siblings: use blocked_reason as summary
+        if sib_status in ("BLOCKED", "FAILED") and sib_summary == "—":
+            sib_summary = f"[{sib_status}] {sib_fields.get(FIELDS['blocked_reason'], 'no reason')}"
+
         parent_messages = _task_context_module.append(
             parent_messages,
             role="user",
@@ -375,7 +402,7 @@ def _check_aggregation(record_id: str, task_id: str, evidence: dict) -> None:
         title="所有子任务完成，Sam 开始汇总",
         fields={"任务ID": parent_task_id, "子任务数": str(len(siblings))},
     )
-    log.info("aggregation: parent %s activated (LOADED)", parent_record_id)
+    _agg_log.info("aggregation: parent %s activated (LOADED)", parent_record_id)
 
 
 def run_once() -> None:
